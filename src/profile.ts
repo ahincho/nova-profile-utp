@@ -40,10 +40,16 @@ export const utpProfile = defineProfile({
   },
 
   observability: {
-    // Sólo la correlación. La identidad no se copia de la petición que llega,
-    // porque en un BFF la escribiría el cliente; los servicios internos que la
-    // pasan hacia abajo declaran UTP_INTERNAL_HEADERS.
-    correlationHeaders: ['x-request-id'],
+    // Lo que viaja entre capas: la correlación, el usuario y su rol. En un BFF
+    // el usuario y el rol salen del token y nunca de la petición, porque los
+    // escribe la autenticación; en un servicio interno, que no declara `auth`,
+    // se copian de lo que puso la capa de arriba.
+    correlationHeaders: ['x-request-id', 'user-id', 'user-role'],
+
+    // El frontend manda el id como transaction-id y lo espera de vuelta con ese
+    // nombre; hacia adentro viaja como x-request-id. Aceptar los dos es lo que
+    // deja que el mismo perfil sirva al BFF y a los servicios de adentro.
+    requestId: { accept: ['transaction-id', 'x-request-id'] },
   },
 
   auth: {
@@ -55,8 +61,9 @@ export const utpProfile = defineProfile({
     ignoredRolePrefixes: ['default-roles-'],
     normalizeId: normalizeUtpUserId,
 
-    // El nombre con el que el usuario viaja hacia las otras capas, que es el
-    // que leen orquestación y negocio.
+    // Los nombres con que el usuario y su rol viajan hacia las otras capas, que
+    // son los que leen orquestación y negocio.
     userIdHeader: 'user-id',
+    roleHeader: 'user-role',
   },
 });

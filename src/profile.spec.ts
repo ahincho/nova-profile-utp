@@ -44,19 +44,30 @@ describe('utpProfile', () => {
     expect(utpProfile.health?.legacyPath).toBe('api/v1/health');
   });
 
-  it('carries only the correlation id from the incoming request', () => {
+  it('carries the correlation id, the user and their role between layers', () => {
     expect(utpProfile.observability?.correlationHeaders).toEqual([
       'x-request-id',
+      'user-id',
+      'user-role',
     ]);
   });
 
-  it('reads a Keycloak token and sends the user on as user-id', () => {
+  // El frontend lo manda como transaction-id; hacia adentro viaja como
+  // x-request-id, y los servicios de adentro lo reciben así.
+  it('takes the request id the frontend sends before the inner one', () => {
+    expect(utpProfile.observability?.requestId).toEqual({
+      accept: ['transaction-id', 'x-request-id'],
+    });
+  });
+
+  it('reads a Keycloak token and sends the user and role on', () => {
     expect(utpProfile.auth).toMatchObject({
       rolesClaim: 'realm_access.roles',
       ignoredRoles: ['offline_access', 'uma_authorization'],
       ignoredRolePrefixes: ['default-roles-'],
       normalizeId: normalizeUtpUserId,
       userIdHeader: 'user-id',
+      roleHeader: 'user-role',
     });
   });
 });

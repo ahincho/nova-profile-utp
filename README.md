@@ -32,35 +32,25 @@ void bootstrap(AppModule, { profile: utpProfile });
 
 El perfil va en los dos lugares porque los secretos se desdoblan antes de que exista la aplicación. Si no coinciden, el arranque se detiene.
 
-Un servicio detrás del BFF, que pasa hacia abajo la identidad que le puso la capa de arriba, declara además sus cabeceras:
-
-```ts
-import { UTP_INTERNAL_HEADERS, utpProfile } from '@ahincho/nova-profile-utp';
-
-NovaModule.forRoot({
-  profile: utpProfile,
-  observability: { correlationHeaders: UTP_INTERNAL_HEADERS },
-});
-```
+El mismo perfil sirve al BFF y a los servicios de adentro. Un servicio detrás del BFF no declara `auth`, y con eso pasa hacia abajo la identidad que le puso la capa de arriba.
 
 ## Qué declara
 
-| Convención                 | Valor                                | Por qué                                                                                                       |
-| -------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
-| Puerto                     | `APP_PORT`, y si no está, `PORT`     | La task definition inyecta `APP_PORT`; `PORT` es el que fija el Dockerfile.                                   |
-| Secretos                   | toda variable `SECRET_*` se desdobla | Cada secreto de Secrets Manager llega entero, como un JSON, en una sola variable.                             |
-| Sonda de los target groups | `/api/v1/health`                     | Es la ruta que revisa el balanceador; se sirve junto a `/health/live` y `/health/ready`.                      |
-| Correlación                | `x-request-id`                       | Es la única cabecera que se copia de la petición que llega.                                                   |
-| Roles                      | `realm_access.roles`                 | El proveedor de identidad es Keycloak. No cuentan `offline_access`, `uma_authorization` ni `default-roles-*`. |
-| Usuario                    | el código, en mayúsculas             | `u12345678@utp.edu.pe` y `u12345678` son el mismo alumno, en todos los ambientes.                             |
-| Usuario hacia otras capas  | la cabecera `user-id`                | Es el nombre que leen orquestación y negocio.                                                                 |
+| Convención                      | Valor                                                                   | Por qué                                                                                                                 |
+| ------------------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Puerto                          | `APP_PORT`, y si no está, `PORT`                                        | La task definition inyecta `APP_PORT`; `PORT` es el que fija el Dockerfile.                                             |
+| Secretos                        | toda variable `SECRET_*` se desdobla                                    | Cada secreto de Secrets Manager llega entero, como un JSON, en una sola variable.                                       |
+| Sonda de los target groups      | `/api/v1/health`                                                        | Es la ruta que revisa el balanceador; se sirve junto a `/health/live` y `/health/ready`.                                |
+| Id de correlación               | entra como `transaction-id` o `x-request-id`, viaja como `x-request-id` | El frontend lo manda como `transaction-id` y lo recibe de vuelta con ese nombre; entre capas viaja como `x-request-id`. |
+| Roles                           | `realm_access.roles`                                                    | El proveedor de identidad es Keycloak. No cuentan `offline_access`, `uma_authorization` ni `default-roles-*`.           |
+| Usuario                         | el código, en mayúsculas                                                | `u12345678@utp.edu.pe` y `u12345678` son el mismo alumno, en todos los ambientes.                                       |
+| Usuario y rol hacia otras capas | las cabeceras `user-id` y `user-role`                                   | Son los nombres que leen orquestación y negocio.                                                                        |
 
 ## Qué no declara, a propósito
 
 - **Prefijo global.** Las rutas de UTP llevan la versión en cada controlador (`v1/student/...`, `v1/internal/acl/...`), y un prefijo movería rutas de las que ya dependen las otras capas.
 - **Autenticación.** El perfil dice cómo se lee un token; pedirlo lo decide cada servicio declarando `auth`.
 - **Rol preferido.** Depende del servicio: un BFF de alumnos prefiere `student`.
-- **Identidad copiada de la petición.** `user-id` y `user-role` no están entre las cabeceras del perfil, porque en un BFF se copiarían de lo que mande el cliente: un `user-role` escrito a mano llegaría a negocio como si lo hubiera dicho el token. Los servicios internos las declaran con `UTP_INTERNAL_HEADERS`.
 - **Estándar de API.** Queda el de Nova: el sobre `{ success, status, data, errors }` y su catálogo de códigos, que son los que ya usan los servicios de UTP.
 
 ## Errores de upstream
@@ -73,16 +63,19 @@ Quedan por decidir para UTP:
 - los nombres de los campos del log que se consultan en OpenSearch;
 - si el borde expone la cabecera `Proxy-Status`.
 
+## La identidad sale del token
+
+En un BFF, `user-id` y `user-role` los escribe sólo la autenticación. Si el cliente manda una cabecera con esos nombres, Nova no la copia en ninguna ruta: en una protegida la reemplaza por lo que dice el token, y en una pública no viaja. Sin esa regla, un `user-role` escrito a mano llegaría a negocio como si lo hubiera dicho el token.
+
+Un servicio interno no declara `auth`, así que copia esas cabeceras de la capa de arriba, que es quien las escribió.
+
 ## Lo que el perfil todavía no puede declarar
 
-Dos convenciones de UTP que Nova hoy no puede expresar. Mientras tanto, un BFF de UTP las resuelve en su propio código.
-
-1. **La correlación del borde.** El BFF recibe `transaction-id` del frontend, lo exige como UUID, lo devuelve en la respuesta y lo pasa hacia adentro como `x-request-id`. Nova lee y reenvía la misma cabecera, y genera un id si falta.
-2. **El rol hacia las otras capas.** Los servicios de UTP pasan el rol del usuario en `user-role`, y la autenticación de Nova solo propaga el id.
+Hoy el BFF de UTP responde 400 cuando el frontend no manda `transaction-id` o no es un UUID. Nova genera un id nuevo en ese caso, así que un BFF sobre este perfil es más permisivo que el de hoy. Rechazar o generar es una pregunta abierta de la plataforma: rechazar garantiza que el id del frontend sea el de la traza, pero las sondas de salud nunca lo mandan.
 
 ## Compatibilidad
 
-Requiere `@ahincho/nova-nestjs` 0.16, la primera versión con perfiles. Como esa versión todavía no está publicada, el repositorio aún no tiene lockfile.
+Requiere `@ahincho/nova-nestjs` 0.16, la primera versión con perfiles y con las cabeceras del borde. Como esa versión todavía no está publicada, el repositorio aún no tiene lockfile.
 
 ## Licencia
 
