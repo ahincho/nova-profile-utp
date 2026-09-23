@@ -1,0 +1,48 @@
+{
+  "name": "@ahincho/nova-profile-utp",
+  "version": "0.1.0",
+  "description": "UTP's organization profile for Nova Platform: the conventions its services share, declared once",
+  "license": "EPL-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ahincho/nova-profile-utp.git"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://npm.pkg.github.com"
+  },
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "packageManager": "pnpm@11.24.0",
+  "engines": {
+    "node": ">=24.15"
+  },
+  "scripts": {
+    "build": "nova build",
+    "typecheck": "nova typecheck",
+    "test": "nova test",
+    "test:cov": "nova test:cov",
+    "lint": "nova lint",
+    "format": "nova format",
+    "format:check": "nova format:check",
+    "verify": "nova typecheck && nova lint && nova test:cov && nova format:check"
+  },
+  "peerDependencies": {
+    "@ahincho/nova-nestjs": "^0.16.0"
+  },
+  "devDependencies": {
+    "@ahincho/nova-nestjs": "^0.16.0",
+    "@ahincho/nova-nestjs-toolchain": "^0.16.0"
+  }
+}

@@ -1,0 +1,62 @@
+import { defineProfile } from '@ahincho/nova-nestjs';
+import { normalizeUtpUserId } from './user-id';
+
+/**
+ * Las convenciones que comparten los servicios de UTP, declaradas una vez.
+ *
+ * Cada valor está acá porque todos los servicios de la organización lo
+ * escriben igual; lo que cambia de uno a otro -sus upstreams, sus chequeos, si
+ * pide token, qué rol prefiere- lo declara cada uno.
+ *
+ * @example
+ * NovaModule.forRoot({ profile: utpProfile, config: { load: [academic] } });
+ * void bootstrap(AppModule, { profile: utpProfile });
+ */
+export const utpProfile = defineProfile({
+  name: 'utp',
+
+  bootstrap: {
+    // APP_PORT es lo que la task definition inyecta desde el puerto del
+    // contenedor, y PORT el que fija el Dockerfile. Va primero APP_PORT para
+    // que un cambio de puerto en la infraestructura no deje al health check
+    // apuntando a un puerto donde la aplicación no escucha.
+    portVariables: ['APP_PORT', 'PORT'],
+
+    // Cada secreto de Secrets Manager llega entero, como un JSON, en una
+    // variable que empieza con SECRET_. El prefijo es lo que deja agregar uno
+    // nuevo sin tocar ningún servicio.
+    secrets: { prefix: 'SECRET_' },
+
+    // Sin prefijo global, a propósito: la versión va escrita en cada
+    // controlador -`v1/student/...`, `v1/internal/acl/...`-, y un prefijo
+    // movería rutas de las que ya dependen las otras capas.
+  },
+
+  health: {
+    // La ruta que revisan los target groups del balanceador. Se sirve junto a
+    // /health/live y /health/ready y no se mueve: moverla pide cambiar el
+    // target group de cada servicio.
+    legacyPath: 'api/v1/health',
+  },
+
+  observability: {
+    // Sólo la correlación. La identidad no se copia de la petición que llega,
+    // porque en un BFF la escribiría el cliente; los servicios internos que la
+    // pasan hacia abajo declaran UTP_INTERNAL_HEADERS.
+    correlationHeaders: ['x-request-id'],
+  },
+
+  auth: {
+    // El proveedor de identidad es Keycloak: los roles del realm van en
+    // realm_access.roles, y estos tres describen lo que el token puede hacer,
+    // no quién lo trae.
+    rolesClaim: 'realm_access.roles',
+    ignoredRoles: ['offline_access', 'uma_authorization'],
+    ignoredRolePrefixes: ['default-roles-'],
+    normalizeId: normalizeUtpUserId,
+
+    // El nombre con el que el usuario viaja hacia las otras capas, que es el
+    // que leen orquestación y negocio.
+    userIdHeader: 'user-id',
+  },
+});

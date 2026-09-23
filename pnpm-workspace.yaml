@@ -1,0 +1,26 @@
+# pnpm rechaza por defecto una versión publicada hace muy poco: es la defensa
+# contra un mantenedor comprometido que publica algo malicioso y lo ve instalado
+# al instante. La política cuida de terceros, y estos paquetes son propios.
+minimumReleaseAgeExclude:
+  - '@ahincho/nova-*'
+
+# Los paquetes que llegan por transitividad tienen peers entre ellos, y esto es
+# lo que avisa si la plataforma publica una combinación que no cierra.
+strictPeerDependencies: true
+
+# El script de `@scarf/scarf` es telemetría y llega arrastrado por
+# `@nestjs/swagger`, dentro de la plataforma. Apagarlo no le quita nada.
+allowBuilds:
+  '@scarf/scarf': false
+
+# Las pruebas importan NestJS, que llega dentro de la plataforma, y pnpm aísla
+# node_modules: sin esto un paquete transitivo no se puede importar.
+publicHoistPattern:
+  - '@nestjs/*'
+  - '@types/*'
+  - rxjs
+  - reflect-metadata
+  - class-validator
+  - class-transformer
+  - typescript
+  - vitest
